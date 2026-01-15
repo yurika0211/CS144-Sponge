@@ -12,15 +12,43 @@ void DUMMY_CODE(Targs &&... /* unused */) {}
 
 using namespace std;
 
-StreamReassembler::StreamReassembler(const size_t capacity) : _output(capacity), _capacity(capacity) {}
+StreamReassembler::StreamReassembler(const size_t capacity)
+    : _output(capacity), _capacity(capacity), _next_index(0), buffer() {}
 
 //! \details This function accepts a substring (aka a segment) of bytes,
 //! possibly out-of-order, from the logical stream, and assembles any newly
 //! contiguous substrings and writes them into the output stream in order.
-void StreamReassembler::push_substring(const string &data, const size_t index, const bool eof) {
-    DUMMY_CODE(data, index, eof);
+void StreamReassembler::push_substring(const std::string &data, const uint64_t index, const bool eof) {
+    if (data.empty() && !eof)
+        return;
+
+    uint64_t start = std::max(index, _next_index);
+    if (start < index + data.size()) {
+        std::string sub = data.substr(start - index);
+        buffer[start] = sub;
+    }
+
+    // 尝试写入_output
+    while (!buffer.empty()) {
+        auto it = buffer.begin();
+        if (it->first != _next_index)
+            break;
+        _output.write(it->second);
+        _next_index += it->second.size();
+        buffer.erase(it);
+    }
+
+    if (eof)
+        _output.end_input();
+}
+size_t StreamReassembler::unassembled_bytes() const {
+    size_t count = 0;
+    for (const auto &p : buffer) {
+        count += p.second.size();
+    }
+    return count;
 }
 
-size_t StreamReassembler::unassembled_bytes() const { return {}; }
-
-bool StreamReassembler::empty() const { return {}; }
+bool StreamReassembler::empty() const {
+    return buffer.empty();
+}
